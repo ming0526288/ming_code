@@ -66,7 +66,7 @@ def agent_loop(state: LoopState):
         for block in response.content:
             if block.type == "tool_use":
                 command = block.input["command"]
-                print(f"{command}")
+                print(f"\033[33m$ {command}\033[0m") # 执行的命令打印出来显示黄色
                 out_put = run_bash(command)
                 print(out_put[:200])
                 results.append({
@@ -91,7 +91,7 @@ if __name__ == "__main__":
     history = []
     while True:
         try:
-            query = input()
+            query = input("\033[36ms01 >> \033[0m") # 前面青色后面正常颜色
         except (EOFError, KeyboardInterrupt):
             break
         if query.strip().lower() in ("q", "exit", ""):
