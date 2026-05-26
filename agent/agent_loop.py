@@ -66,7 +66,9 @@ def agent_loop(state: LoopState):
         for block in response.content:
             if block.type == "tool_use":
                 command = block.input["command"]
+                print(f"{command}")
                 out_put = run_bash(command)
+                print(out_put[:200])
                 results.append({
                     "type": "tool_result",
                     "tool_use_id": block.id,
@@ -87,10 +89,17 @@ def extract_text(content) -> str:
 
 if __name__ == "__main__":
     history = []
-    query = input()
-    history.append({"role": "user", "content": query})
-    state = LoopState(messages=history)
-    agent_loop(state)
-    response_content = state.messages[-1]["content"]
-    final_text = extract_text(response_content)
-    print(final_text)
+    while True:
+        try:
+            query = input()
+        except (EOFError, KeyboardInterrupt):
+            break
+        if query.strip().lower() in ("q", "exit", ""):
+            break
+
+        history.append({"role": "user", "content": query})
+        state = LoopState(messages=history)
+        agent_loop(state)
+        response_content = state.messages[-1]["content"]
+        final_text = extract_text(response_content)
+        print(final_text)
