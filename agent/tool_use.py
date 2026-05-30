@@ -95,109 +95,109 @@ TOOLS = [
      "input_schema": {"type": "object", "properties": {"path": {"type": "string"}, "old_text": {"type": "string"}, "new_text": {"type": "string"}}, "required": ["path", "old_text", "new_text"]}},
 ]
 
-# def block_to_dict(block):
-#     if isinstance(block, dict):
-#         raw = block
-#     elif hasattr(block, "model_dump"):
-#         raw = block.model_dump()
-#     else:
-#         return {
-#             "type": "text",
-#             "text": str(block)
-#         }
-#     clean = {
-#         k: v for k, v in raw.items()
-#         if k not in ("_internal", "_source", "_timestamp")
-#         and v is not None
-#     }
-#     return clean
+def block_to_dict(block):
+    if isinstance(block, dict):
+        raw = block
+    elif hasattr(block, "model_dump"):
+        raw = block.model_dump()
+    else:
+        return {
+            "type": "text",
+            "text": str(block)
+        }
+    clean = {
+        k: v for k, v in raw.items()
+        if k not in ("_internal", "_source", "_timestamp")
+        and v is not None
+    }
+    return clean
 
 
-# def normalize_messages(messages: list) -> list:
-#     normalized = []
+def normalize_messages(messages: list) -> list:
+    normalized = []
 
-#     # Step 1: 清理消息
-#     for message in messages:
-#         clean = {"role": message["role"]}
-#         content = message.get("content")
-#         if isinstance(content, str):
-#             if not content.strip():
-#                 continue
-#             clean["content"] = content
-#         elif isinstance(content, list):
-#             blocks = []
-#             for block in content:
-#                 clean_block = block_to_dict(block)
-#                 if clean_block is not None:
-#                     blocks.append(clean_block)
-#             if not blocks:
-#                 continue
-#             clean["content"] = blocks
-#         else:
-#             continue
-#         normalized.append(clean)
+    # Step 1: 清理消息
+    for message in messages:
+        clean = {"role": message["role"]}
+        content = message.get("content")
+        if isinstance(content, str):
+            if not content.strip():
+                continue
+            clean["content"] = content
+        elif isinstance(content, list):
+            blocks = []
+            for block in content:
+                clean_block = block_to_dict(block)
+                if clean_block is not None:
+                    blocks.append(clean_block)
+            if not blocks:
+                continue
+            clean["content"] = blocks
+        else:
+            continue
+        normalized.append(clean)
 
-#     # Step 2: 收集已有 tool_result
-#     existing_results = set()
-#     for message in normalized:
-#         content = message.get("content")
-#         if isinstance(content, list):
-#             for block in content:
-#                 if block.get("type") == "tool_result":
-#                     existing_results.add(block.get("tool_use_id"))
+    # Step 2: 收集已有 tool_result
+    existing_results = set()
+    for message in normalized:
+        content = message.get("content")
+        if isinstance(content, list):
+            for block in content:
+                if block.get("type") == "tool_result":
+                    existing_results.add(block.get("tool_use_id"))
 
-#     # Step 3: 补齐缺失 tool_result
-#     fixed = []
-#     for message in normalized:
-#         fixed.append(message)
-#         content = message.get("content")
-#         if message["role"] == "assistant" and isinstance(content, list):
-#             missing_results = []
-#             for block in content:
-#                 if block.get("type") == "tool_use" and block.get("id") not in existing_results:
-#                     missing_results.append({
-#                         "type": "tool_result",
-#                         "tool_use_id": block["id"],
-#                         "content": "(cancelled)"
-#                     })
-#             if missing_results:
-#                 fixed.append({"role": "user","content": missing_results})
-#     if not fixed:
-#         return []
+    # Step 3: 补齐缺失 tool_result
+    fixed = []
+    for message in normalized:
+        fixed.append(message)
+        content = message.get("content")
+        if message["role"] == "assistant" and isinstance(content, list):
+            missing_results = []
+            for block in content:
+                if block.get("type") == "tool_use" and block.get("id") not in existing_results:
+                    missing_results.append({
+                        "type": "tool_result",
+                        "tool_use_id": block["id"],
+                        "content": "(cancelled)"
+                    })
+            if missing_results:
+                fixed.append({"role": "user","content": missing_results})
+    if not fixed:
+        return []
 
-#     # Step 4: 合并连续同角色消息
-#     merged = [fixed[0]]
-#     for message in fixed[1:]:
-#         if message["role"] == merged[-1]["role"]:
-#             prev = merged[-1] # prev 是 previous message
-#             prev_content = (
-#                 prev["content"]
-#                 if isinstance(prev["content"], list)
-#                 else [{"type": "text", "text": prev["content"]}]
-#             )
-#             curr_content = (
-#                 message["content"]
-#                 if isinstance(message["content"], list)
-#                 else [{"type": "text", "text": message["content"]}]
-#             )
-#             prev["content"] = prev_content + curr_content
-#         else:
-#             merged.append(message)
+    # Step 4: 合并连续同角色消息
+    merged = [fixed[0]]
+    for message in fixed[1:]:
+        if message["role"] == merged[-1]["role"]:
+            prev = merged[-1] # prev 是 previous message
+            prev_content = (
+                prev["content"]
+                if isinstance(prev["content"], list)
+                else [{"type": "text", "text": prev["content"]}]
+            )
+            curr_content = (
+                message["content"]
+                if isinstance(message["content"], list)
+                else [{"type": "text", "text": message["content"]}]
+            )
+            prev["content"] = prev_content + curr_content
+        else:
+            merged.append(message)
 
-#     # Step 5: 最后再过滤一次空消息
-#     merged = [
-#         m for m in merged
-#         if m.get("content")
-#     ]
+    # Step 5: 最后再过滤一次空消息
+    merged = [
+        m for m in merged
+        if m.get("content")
+    ]
 
-#     return merged
+    return merged
 
 def agent_loop(messages: list):
     while True:
         response = client.messages.create(
             model=MODEL,
             system=SYSTEM,
-            messages=messages,
+            messages=normalize_messages(messages),
             tools=TOOLS,
             max_tokens=8000,
         )
