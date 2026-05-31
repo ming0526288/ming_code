@@ -31,11 +31,11 @@ def safe_path(p: str) -> Path:
 def run_read(path: str, limit:int = None) ->str:
     try:
         file_path = safe_path(path) # 文件路径
-        text = file_path.read_text() # 读取文本内容
+        text = file_path.read_text(encoding="utf-8", errors="replace") # 读取文本内容
         lines = text.splitlines() # 按行拆开
         if limit and limit < len(lines): # 如果传入limit，文件行数超过limit，只保留limit行
             lines = lines[:limit] 
-        return "\n".join(lines[:50000]) # 最多返回前50000行
+        return "\n".join(lines)[:50000] # 最多返回前50000字符
     except Exception as e:
         return f"Error:{e}"
 
@@ -53,7 +53,7 @@ def run_write(path: str, content: str) -> str:
 def run_edit(path:str, old_text: str, new_text: str) -> str:
     try:
         file_path = safe_path(path)
-        content = file_path.read_text()
+        content = file_path.read_text(encoding="utf-8", errors="replace")
         if old_text not in content:
             return f"Error: Text not found in {path}"
         file_path.write_text(content.replace(old_text, new_text, 1)) # 1代表替换一次
@@ -61,6 +61,26 @@ def run_edit(path:str, old_text: str, new_text: str) -> str:
     except Exception as e:
         return f"Error:{e}"
     
+import locale
+
+def decode_output(data: bytes) -> str:
+    if not data:
+        return ""
+    encodings = [
+        "utf-8",
+        "utf-8-sig",
+        "gbk",
+        "cp936",
+        locale.getpreferredencoding(False),
+    ]
+    for enc in encodings:
+        try:
+            return data.decode(enc)
+        except UnicodeDecodeError:
+            continue
+    return data.decode("utf-8", errors="replace")
+
+
 def run_bash(command: str) -> str:
     try:
         result = subprocess.run(
@@ -68,13 +88,19 @@ def run_bash(command: str) -> str:
             shell=True,
             cwd=WORKDIR,
             capture_output=True,
-            text=True,
+            text=False,
             timeout=120
         )
-        out = (result.stdout + result.stderr).strip()
-        return out[:50000] if out else "(no output)"
+        stdout = decode_output(result.stdout)
+        stderr = decode_output(result.stderr)
+        out = (stdout + stderr).strip()
+        if not out:
+            out = "(no output)"
+        return out[:50000]
     except subprocess.TimeoutExpired:
-        return "Error: Timeout(120s)"
+        return "Error: command timed out"
+    except Exception as e:
+        return f"Error: {e}"
     
 # -- The dispatch map: {tool_name: handler} --
 TOOL_HANDLERS = {
@@ -228,6 +254,6 @@ if __name__ == "__main__":
         response_content = history[-1]["content"]
         if isinstance(response_content, list):
             for block in response_content:
-                if hasattr(block, "text"):
+                if hasattr(block, "text"): # has attribute 是否有某个属性
                     print(block.text)
         print()
